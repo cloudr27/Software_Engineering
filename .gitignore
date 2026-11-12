@@ -1,0 +1,30 @@
+# Секреты и локальные настройки (КРИТИЧНО!)
+.env
+.env.local
+.env.*.local
+
+# Зависимости (Node.js, Python и т.д.)
+node_modules/
+venv/
+__pycache__/
+
+# Артефакты сборки и дистрибутивы
+dist/
+build/
+*.exe
+*.dll
+*.pyc
+
+# Настройки IDE и редакторов
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Системный мусор ОС
+.DS_Store
+Thumbs.db
+
+# Логи и временные файлы
+*.log
+*.tmp
