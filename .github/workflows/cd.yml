@@ -53,15 +53,18 @@ jobs:
 
       - name: Запуск приложения
         run: |
-          $env:RUNNER_TRACKING_ID = ""
-          $uv = (Get-Command uv).Source
-          Start-Process -FilePath $uv `
-            -ArgumentList "run","uvicorn","app.main:app","--host","127.0.0.1","--port","8000" `
-            -WorkingDirectory C:\helpdesk-deploy -WindowStyle Hidden
+          Set-Location C:\helpdesk-deploy
+          Start-Job -ScriptBlock {
+              Set-Location C:\helpdesk-deploy
+              $uv = (Get-Command uv).Source
+              & $uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+          }
+          Start-Sleep -Seconds 5
 
       - name: Проверка работоспособности (smoke test)
         run: |
-          Start-Sleep -Seconds 25
+          Set-Location C:\helpdesk-deploy
+          Start-Sleep -Seconds 10
           $r = Invoke-RestMethod http://127.0.0.1:8000/api/dictionaries/statuses
           Write-Host "Статусов в справочнике: $($r.Count)"
           if ($r.Count -lt 1) { exit 1 }
