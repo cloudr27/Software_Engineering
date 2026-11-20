@@ -26,7 +26,6 @@ jobs:
     needs: test
     runs-on: self-hosted
     env:
-      # Реальная БД PostgreSQL. Имя переменной должно совпадать с тем, что читает app/database.py
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
@@ -54,17 +53,35 @@ jobs:
       - name: Запуск приложения
         run: |
           Set-Location C:\helpdesk-deploy
-          Start-Job -ScriptBlock {
-              Set-Location C:\helpdesk-deploy
-              $uv = (Get-Command uv).Source
-              & $uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
-          }
-          Start-Sleep -Seconds 5
+          # Запускаем uvicorn.exe НАПРЯМУЮ из .venv, отвязывая процесс через Start-Process
+          $uvicorn = "C:\helpdesk-deploy\.venv\Scripts\uvicorn.exe"
+          Start-Process -FilePath $uvicorn `
+            -ArgumentList "app.main:app", "--host", "127.0.0.1", "--port", "8000" `
+            -WorkingDirectory "C:\helpdesk-deploy" `
+            -WindowStyle Hidden
+          Start-Sleep -Seconds 3
 
       - name: Проверка работоспособности (smoke test)
         run: |
           Set-Location C:\helpdesk-deploy
-          Start-Sleep -Seconds 10
-          $r = Invoke-RestMethod http://127.0.0.1:8000/api/dictionaries/statuses
-          Write-Host "Статусов в справочнике: $($r.Count)"
-          if ($r.Count -lt 1) { exit 1 }
+          
+          # Умное ожидание: стучимся 10 раз по 3 секунды (всего 30 сек)
+          $maxAttempts = 10
+          $success = $false
+          
+          for ($i = 1; $i -le $maxAttempts; $i++) {
+              Start-Sleep -Seconds 3
+              try {
+                  $r = Invoke-RestMethod http://127.0.0.1:8000/api/dictionaries/statuses -ErrorAction Stop
+                  Write-Host "Ура! Сервер ответил на попытке $i. Статусов: $($r.Count)"
+                  $success = $true
+                  break
+              } catch {
+                  Write-Host "Попытка $i из $maxAttempts: сервер еще не поднялся, ждем..."
+              }
+          }
+          
+          if (-not $success) {
+              Write-Host "Ошибка: сервер не запустился за 30 секунд."
+              exit 1
+          }
