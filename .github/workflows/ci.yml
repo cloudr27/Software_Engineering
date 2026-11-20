@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev]
+
+jobs:
+  test:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установка зависимостей
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python -m pip install --upgrade pip
+          .venv\Scripts\python -m pip install -r requirements.txt
+          .venv\Scripts\python -m pip install pytest httpx email-validator
+
+      - name: Тесты
+        run: .venv\Scripts\python -m pytest -v
