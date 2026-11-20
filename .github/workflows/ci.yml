@@ -12,12 +12,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 1. Устанавливаем сам uv (если его нет на self-hosted раннере)
+      - name: Установка uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # 2. Синхронизируем зависимости через uv
+      # Флаг --all-extras подтянет и dev-зависимости (pytest, httpx и т.д.), если они прописаны в pyproject.toml
       - name: Установка зависимостей
         run: |
-          python -m venv .venv
-          .venv\Scripts\python -m pip install --upgrade pip
-          .venv\Scripts\python -m pip install -r requirements.txt
-          .venv\Scripts\python -m pip install pytest httpx email-validator
+          uv sync --all-extras
 
+      # 3. Запускаем тесты. uv run автоматически использует созданное окружение
       - name: Тесты
-        run: .venv\Scripts\python -m pytest -v
+        run: |
+          uv run pytest backend/tests -v
