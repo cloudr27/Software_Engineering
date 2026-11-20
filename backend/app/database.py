@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv() # Загружаем переменные из .env
 
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./local.db")
 
 # Подключаемся к базе
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
