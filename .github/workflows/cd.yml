@@ -26,6 +26,7 @@ jobs:
     needs: test
     runs-on: self-hosted
     env:
+      # Реальная БД PostgreSQL. Имя переменной должно совпадать с тем, что читает app/database.py
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
@@ -50,38 +51,31 @@ jobs:
         working-directory: C:\helpdesk-deploy
         run: uv sync --no-dev
 
-      - name: Запуск приложения
+      - name: Запуск приложения и проверка работоспособности
         run: |
-          Set-Location C:\helpdesk-deploy
-          # Запускаем uvicorn.exe НАПРЯМУЮ из .venv, отвязывая процесс через Start-Process
-          $uvicorn = "C:\helpdesk-deploy\.venv\Scripts\uvicorn.exe"
-          Start-Process -FilePath $uvicorn `
-            -ArgumentList "app.main:app", "--host", "127.0.0.1", "--port", "8000" `
-            -WorkingDirectory "C:\helpdesk-deploy" `
-            -WindowStyle Hidden
-          Start-Sleep -Seconds 3
-
-      - name: Проверка работоспособности (smoke test)
-        run: |
-          Set-Location C:\helpdesk-deploy
-          
-          # Умное ожидание: стучимся 10 раз по 3 секунды (всего 30 сек)
-          $maxAttempts = 10
-          $success = $false
-          
-          for ($i = 1; $i -le $maxAttempts; $i++) {
-              Start-Sleep -Seconds 3
-              try {
-                  $r = Invoke-RestMethod http://127.0.0.1:8000/api/dictionaries/statuses -ErrorAction Stop
-                  Write-Host "Ура! Сервер ответил на попытке $i. Статусов: $($r.Count)"
-                  $success = $true
-                  break
-              } catch {
-                  Write-Host "Попытка $i из $maxAttempts: сервер еще не поднялся, ждем..."
-              }
+          if ([string]::IsNullOrEmpty($env:DATABASE_URL)) {
+            Write-Host "ВНИМАНИЕ: секрет DATABASE_URL пустой или не создан (Settings -> Secrets and variables -> Actions)"
           }
-          
-          if (-not $success) {
-              Write-Host "Ошибка: сервер не запустился за 30 секунд."
-              exit 1
+          $env:RUNNER_TRACKING_ID = ""
+          $uv = (Get-Command uv).Source
+          $out = "C:\helpdesk-deploy\app.out.log"
+          $err = "C:\helpdesk-deploy\app.err.log"
+          $p = Start-Process -FilePath $uv `
+            -ArgumentList "run","uvicorn","app.main:app","--host","127.0.0.1","--port","8000" `
+            -WorkingDirectory C:\helpdesk-deploy -WindowStyle Hidden -PassThru `
+            -RedirectStandardOutput $out -RedirectStandardError $err
+          Start-Sleep -Seconds 10
+          if ($p.HasExited) {
+            Write-Host "Приложение завершилось при старте, код $($p.ExitCode). Логи:"
+            Get-Content $out, $err
+            exit 1
+          }
+          try {
+            $r = Invoke-RestMethod http://127.0.0.1:8000/api/dictionaries/statuses
+            Write-Host "Приложение запущено. Статусов в справочнике: $($r.Count)"
+            if ($r.Count -lt 1) { exit 1 }
+          } catch {
+            Write-Host "Запрос не удался: $_"
+            Get-Content $out, $err
+            exit 1
           }
