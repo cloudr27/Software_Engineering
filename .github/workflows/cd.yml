@@ -1,0 +1,67 @@
+name: CD
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  test:
+    runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установка uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Установка зависимостей
+        run: uv sync
+
+      - name: Тесты
+        run: uv run pytest -v
+
+  deploy:
+    needs: test
+    runs-on: self-hosted
+    env:
+      # Реальная БД PostgreSQL. Имя переменной должно совпадать с тем, что читает app/database.py
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установка uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Остановка предыдущей версии
+        run: |
+          Get-CimInstance Win32_Process |
+            Where-Object { $_.CommandLine -like "*helpdesk-deploy*uvicorn*" } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+          exit 0
+
+      - name: Копирование релиза в папку развёртывания
+        run: |
+          New-Item -ItemType Directory -Force C:\helpdesk-deploy | Out-Null
+          robocopy backend C:\helpdesk-deploy /MIR /XD .venv .pytest_cache __pycache__ tests /XF .env
+          if ($LASTEXITCODE -ge 8) { exit 1 } else { exit 0 }
+
+      - name: Установка зависимостей (без dev)
+        working-directory: C:\helpdesk-deploy
+        run: uv sync --no-dev
+
+      - name: Запуск приложения
+        run: |
+          $env:RUNNER_TRACKING_ID = ""
+          $uv = (Get-Command uv).Source
+          Start-Process -FilePath $uv `
+            -ArgumentList "run","uvicorn","app.main:app","--host","127.0.0.1","--port","8000" `
+            -WorkingDirectory C:\helpdesk-deploy -WindowStyle Hidden
+
+      - name: Проверка работоспособности (smoke test)
+        run: |
+          Start-Sleep -Seconds 10
+          $r = Invoke-RestMethod http://127.0.0.1:8000/api/dictionaries/statuses
+          Write-Host "Статусов в справочнике: $($r.Count)"
+          if ($r.Count -lt 1) { exit 1 }
