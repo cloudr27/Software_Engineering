@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev]
+
+jobs:
+  test:
+    runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      # Устанавливаем uv (если его нет на раннере)
+      - name: Установка uv
+        uses: astral-sh/setup-uv@v5
+
+      # Зависимости из pyproject.toml / uv.lock (dev-группа с pytest ставится по умолчанию)
+      - name: Установка зависимостей
+        run: uv sync
+
+      # pytest.ini лежит в backend, поэтому запускаем из этой папки
+      - name: Тесты
+        run: uv run pytest -v
